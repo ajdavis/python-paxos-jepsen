@@ -7,7 +7,7 @@ import sys
 
 def main(config: dict, config_path: str):
     nodes = []
-    for s in config["NODES"]:
+    for s in config["nodes"]:
         host, port = s.split(':')
         nodes.append(subprocess.Popen([
             sys.executable,

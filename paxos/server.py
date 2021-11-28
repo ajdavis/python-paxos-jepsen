@@ -12,16 +12,19 @@ root.addHandler(default_handler)
 app = Flask('PyPaxos')
 
 
-@app.route('/proposer/client-request', methods=['POST'])
+@app.route('/coordinator/client-request', methods=['POST'])
 def client_request():
-    proposer.receive(ClientRequest(**request.json))
-    return jsonify("ok")
+    return jsonify(coordinator.receive(ClientRequest(**request.json)))
 
 
 @app.route('/acceptor/prepare', methods=['POST'])
 def prepare():
-    acceptor.receive(Prepare(**request.json))
-    return jsonify("ok")
+    return jsonify(acceptor.receive(Prepare(**request.json)))
+
+
+@app.route('/acceptor/accept', methods=['POST'])
+def accept():
+    return jsonify(acceptor.receive(Accept(**request.json)))
 
 
 def reverse_url(endpoint: str):
@@ -39,11 +42,9 @@ if __name__ == "__main__":
                         help="JSON config file (see example-config.json)")
     args = parser.parse_args()
     config = Config(**json.load(args.config))
-
-    proposer = Proposer(config, args.port, reverse_url("prepare"))
-    proposer.run()
-
+    coordinator = Coordinator(config=config,
+                              port=args.port,
+                              prepare_url=reverse_url("prepare"),
+                              accept_url=reverse_url("accept"))
     acceptor = Acceptor(config, args.port)
-    acceptor.run()
-
-    app.run(host="0.0.0.0", port=args.port, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=args.port)
