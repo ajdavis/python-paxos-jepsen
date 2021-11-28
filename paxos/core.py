@@ -4,7 +4,7 @@ import threading
 from dataclasses import dataclass
 from typing import Optional
 
-import requests
+from network import send
 
 
 @dataclass
@@ -61,14 +61,8 @@ class AcceptOK(Message):
     proposal_number: ProposalNumber
 
 
-def send(node: str, url: str, message: Message) -> Optional[dict]:
-    try:
-        response = requests.post(f"http://{node}{url}",
-                                 json=dataclasses.asdict(message))
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as exc:
-        logging.getLogger("requests").warning(exc)
+def send_message(node: str, url: str, message: Message) -> Optional[dict]:
+    return send(node, url, dataclasses.asdict(message))
 
 
 class Node:
@@ -88,7 +82,7 @@ class Node:
 
 
 class Coordinator(Node):
-    """Fulfills Coordinator, Proposer≤ and Learner roles."""
+    """Fulfills Coordinator, Proposer, and Learner roles."""
 
     def __init__(
         self, config: Config, port: int, prepare_url: str, accept_url: str):
@@ -119,7 +113,7 @@ class Coordinator(Node):
         prepare_oks = []
         # TODO: parallelize
         for node in self._config.nodes:
-            if reply := send(node, self._prepare_url, prepare_message):
+            if reply := send_message(node, self._prepare_url, prepare_message):
                 prepare_oks.append(PrepareOK(**reply))
 
         if len(prepare_oks) <= len(self._config.nodes) // 2:
@@ -142,7 +136,7 @@ class Coordinator(Node):
         accept_oks = []
         # TODO: parallelize
         for node in self._config.nodes:
-            if reply := send(node, self._accept_url, accept_message):
+            if reply := send_message(node, self._accept_url, accept_message):
                 accept_oks.append(AcceptOK(**reply))
 
         if len(accept_oks) <= len(self._config.nodes) // 2:
