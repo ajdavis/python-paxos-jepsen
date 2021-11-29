@@ -1,13 +1,7 @@
 import dataclasses
+import types
 import typing
 from dataclasses import dataclass
-
-__all__ = [
-    "Message",
-    "ClientRequest",
-    "ClientReply",
-    "Proposal"
-]
 
 
 @dataclass
@@ -15,6 +9,15 @@ class Message:
     @classmethod
     def from_dict(cls: typing.Type["Message"], dct: dict[str, typing.Any]):
         def make_field(typ, val):
+            if val is None:
+                return val
+
+            if isinstance(typ, types.UnionType):
+                # Like "thing | None".
+                assert len(typ.__args__) == 2
+                assert any(a for a in typ.__args__ if a is types.NoneType)
+                typ = next(a for a in typ.__args__ if a is not types.NoneType)
+
             if isinstance(typ, typing.GenericAlias):
                 container_class = typ.__origin__
                 elem_class = typ.__args__[0]
@@ -30,36 +33,50 @@ class Message:
 
             return typ(val)
 
-        types: dict[str, Message] = {
-            f.name: f.type for f in dataclasses.fields(cls)}
-
         return cls(**{
-            name: make_field(types[name], value)
-            for name, value in dct.items()
+            f.name: make_field(f.type, dct.get(f.name))
+            for f in dataclasses.fields(cls)
         })
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class ClientRequest(Message):
     client_id: int
     """Kappa in "Paxos Made Moderately Complex"."""
     command_id: int
     """cid in "Paxos Made Moderately Complex"."""
-    new_value: int
+    new_value: int | None
     """op in "Paxos Made Moderately Complex".
     
     The operation is "append this int to the state, which is a list of ints.
     """
+    new_leaders: list[str] | None
+    """Present if this is a reconfiguration request."""
 
 
-@dataclass
+def is_reconfig(message: Message) -> bool:
+    return (isinstance(message, ClientRequest)
+            and message.new_leaders is not None)
+
+
+@dataclass(unsafe_hash=True)
 class ClientReply(Message):
-    command_id: int
-    """To which command this is the reply."""
+    state: list[int]
+    """Replicated state machine's new state."""
 
 
-@dataclass
+@dataclass(unsafe_hash=True)
 class Proposal(Message):
-    slot_in: int
+    slot: int
     client_request: ClientRequest
     """c in "Paxos Made Moderately Complex"."""
+
+
+@dataclass(unsafe_hash=True)
+class Decision(Proposal):
+    pass
+
+
+@dataclass(unsafe_hash=True)
+class DecisionReply(Message):
+    pass
