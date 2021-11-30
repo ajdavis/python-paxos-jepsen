@@ -41,10 +41,22 @@ def prepare():
     return handle(acceptor, Prepare)
 
 
+@app.route('/proposer/promise', methods=['POST'])
+def promise():
+    """Receive Phase 1b message."""
+    return handle(proposer, Promise)
+
+
 @app.route('/acceptor/accept', methods=['POST'])
 def accept():
     """Receive Phase 2a message."""
     return handle(acceptor, Accept)
+
+
+@app.route('/proposer/accepted', methods=['POST'])
+def accepted():
+    """Receive Phase 2b message."""
+    return handle(proposer, Accepted)
 
 
 def handle(agent: Agent, message_type: Type[Message]):
@@ -72,6 +84,9 @@ if __name__ == "__main__":
                         propose_url=reverse_url("prepare"),
                         accept_url=reverse_url("accept"))
     proposer.run()
-    acceptor = Acceptor(config, args.port)
+    acceptor = Acceptor(config=config,
+                        port=args.port,
+                        promise_url=reverse_url("promise"),
+                        accepted_url=reverse_url("accepted"))
     acceptor.run()
     app.run(host="0.0.0.0", port=args.port)
