@@ -109,7 +109,8 @@ class Proposer(Agent):
         # The replicated state machine (RSM) is just an appendable list of ints.
         self._state: list[int] = []
 
-    def _handle_client_request(self, client_request: ClientRequest,
+    def _handle_client_request(self,
+                               client_request: ClientRequest,
                                future: Future[Message]) -> None:
         # Phase 1a, Fig. 2 of Chand.
         self._requests_unserviced.appendleft(client_request)
@@ -118,8 +119,11 @@ class Proposer(Agent):
         prepare = Prepare(self._port, self._ballot_number)
         self._send_to_all(self._propose_url, prepare)
 
-    def _handle_promise(self, promise: Promise):
+    def _handle_promise(self,
+                        promise: Promise,
+                        future: Future[Message]) -> None:
         # Phase 2a, Fig. 4 of Chand.
+        future.set_result(OK())
         self._promises[promise.ballot].append(promise)
         promises = self._promises[promise.ballot]
         if len(promises) <= len(self._config.nodes) // 2:
@@ -140,8 +144,11 @@ class Proposer(Agent):
         accept = Accept(self._port, self._ballot_number, list(slot_values))
         self._send_to_all(self._accept_url, accept)
 
-    def _handle_accepted(self, accepted: Accepted):
+    def _handle_accepted(self,
+                         accepted: Accepted,
+                         future: Future[Message]) -> None:
         # This is a Learner procedure, and Chand doesn't cover Learners.
+        future.set_result(OK())
         self._accepteds[accepted.ballot].append(accepted)
         accepteds = self._accepteds[accepted.ballot]
         if len(accepteds) <= len(self._config.nodes) // 2:
@@ -175,7 +182,9 @@ class Proposer(Agent):
     def _apply(self, value: Value):
         """Actually update the RSM and reply to the client."""
         self._state.append(value.payload)
-        self._futures.pop(value).set_result(ClientReply(self._state))
+        if value in self._futures:
+            # This server is the one responsible for replying to the client.
+            self._futures.pop(value).set_result(ClientReply(self._state))
 
     def _main_loop(self, q: queue.Queue[Agent._QEntry]) -> None:
         while True:
@@ -183,11 +192,12 @@ class Proposer(Agent):
             if isinstance(entry.message, ClientRequest):
                 self._handle_client_request(entry.message, entry.reply_future)
             elif isinstance(entry.message, Promise):
-                self._handle_promise(entry.message)
+                self._handle_promise(entry.message, entry.reply_future)
             elif isinstance(entry.message, Accepted):
-                self._handle_accepted(entry.message)
+                self._handle_accepted(entry.message, entry.reply_future)
             else:
-                assert False, f"Unexpected {entry.message}"
+                entry.reply_future.set_exception(
+                    ValueError(f"Unexpected {entry.message}"))
 
 
 # Fig. 4 of Chand, auxiliary operators.
