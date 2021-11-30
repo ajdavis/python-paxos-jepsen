@@ -1,16 +1,18 @@
 import argparse
+import dataclasses
 import json
+import logging
+from typing import Type
 
 from flask import Flask, jsonify, request
 from flask.logging import default_handler
 
 from core import *
+from message import *
 
 """
-A single Paxos server process with Paxos agents serving various roles (terms
-from "Paxos Made Moderately Complex"):
-- Replica
-- Leader
+A single Paxos server process with Paxos agents serving various roles:
+- Proposer / Learner
 - Acceptor
 
 The agents communicate with each other, and with agents in other server
@@ -23,26 +25,27 @@ root.addHandler(default_handler)
 app = Flask('PyPaxos')
 
 
-@app.route('/replica/client-request', methods=['POST'])
+@app.route('/proposer/client-request', methods=['POST'])
 def client_request():
-    return jsonify(replica.receive(ClientRequest.from_dict(request.json)))
-
-
-@app.route('/leader/propose', methods=['POST'])
-def propose():
-    return jsonify(leader.receive(Proposal.from_dict(request.json)))
+    """Receive client request, see client.py."""
+    return handle(proposer, ClientRequest)
 
 
 @app.route('/acceptor/prepare', methods=['POST'])
 def prepare():
-    # TODO
-    pass
+    """Receive Phase 1a message."""
+    return handle(acceptor, Prepare)
 
 
 @app.route('/acceptor/accept', methods=['POST'])
 def accept():
-    # TODO
-    pass
+    """Receive Phase 2a message."""
+    return handle(acceptor, Accept)
+
+
+def handle(agent: Agent, message_type: Type[Message]):
+    return jsonify(
+        dataclasses.asdict(agent.receive(message_type.from_dict(request.json))))
 
 
 def reverse_url(endpoint: str):
@@ -60,15 +63,11 @@ if __name__ == "__main__":
                         help="JSON config file (see example-config.json)")
     args = parser.parse_args()
     config = Config(**json.load(args.config))
-    replica = Replica(config=config,
-                      port=args.port,
-                      propose_url=reverse_url("propose"))
-    replica.run()
-    leader = Leader(config=config,
-                    port=args.port,
-                    prepare_url=reverse_url("prepare"),
-                    accept_url=reverse_url("accept"))
-    leader.run()
+    proposer = Proposer(config=config,
+                        port=args.port,
+                        propose_url=reverse_url("prepare"),
+                        accept_url=reverse_url("accept"))
+    proposer.run()
     acceptor = Acceptor(config, args.port)
     acceptor.run()
     app.run(host="0.0.0.0", port=args.port)

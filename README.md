@@ -1,5 +1,5 @@
 Python implementation of Multi-Paxos with a stable leader and reconfiguration, roughly following
-"Paxos Made Moderately Complex".
+"Formal Verification of Multi-Paxos for Distributed Consensus", Chand et al 2016.
 
 Run `python3 paxos/start-servers.py paxos/example-config.json` to start 3 servers. Each runs several
 Paxos "agents": leader, acceptor, and replica. Their shared state is just a list of ints, initially
