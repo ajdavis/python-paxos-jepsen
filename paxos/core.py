@@ -6,8 +6,8 @@ from typing import Sequence, Type, cast
 
 from dataclasses import dataclass
 
-from .message import *
-from .network import send_to_all
+from message import *
+from network import send_to_all
 
 __all__ = [
     "Config",
@@ -135,7 +135,7 @@ class Proposer(Agent):
                 # TODO: needed?
                 # self._futures[self._ballot_number] = entry.reply_future
             else:
-                assert False
+                assert False, f"Unexpected {entry.message}"
 
     def _perform(self, new_value: int):
         self._state.append(new_value)

@@ -3,8 +3,8 @@ from dataclasses import asdict, dataclass
 
 from flask.json import dumps, loads
 
-from ..message import *
-from ..core import max_sv
+from message import *
+from core import max_sv
 
 
 @dataclass
