@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from typing import TypeAlias
 
 __all__ = [
-    "BallotNumber",
-    "SlotNumber",
+    "Ballot",
+    "Slot",
     "Value",
-    "SV",
+    "SlotValue",
     "PValue",
     "VotedSet",
     "Message",
@@ -20,19 +20,16 @@ __all__ = [
     "Accepted",
 ]
 
-BallotNumber: TypeAlias = int
-SlotNumber: TypeAlias = int
+Ballot: TypeAlias = int
+Slot: TypeAlias = int
 Value: TypeAlias = int
-SV: TypeAlias = tuple[SlotNumber, Value]
-# TODO: make this a dataclass.
-PValue: TypeAlias = tuple[BallotNumber, SlotNumber, Value]
-VotedSet: TypeAlias = dict[SlotNumber, PValue]
 
 
-@dataclass
-class Message:
+class JSONish:
+    """Base class. Interoperates with JSON-ish dicts."""
+
     @classmethod
-    def from_dict(cls: typing.Type["Message"], dct: dict[str, typing.Any]):
+    def from_dict(cls: typing.Type["JSONish"], dct: dict[str, typing.Any]):
         fieldnames = set(f.name for f in dataclasses.fields(cls))
         if extra := set(dct.keys()) - fieldnames:
             raise ValueError(f"extra fields for {cls.__name__}: {extra}")
@@ -68,7 +65,7 @@ class Message:
                 else:
                     assert False, f"not implemented for {container_class}"
 
-            if issubclass(typ, Message) and isinstance(val, dict):
+            if issubclass(typ, JSONish) and isinstance(val, dict):
                 return typ.from_dict(val)
 
             return typ(val)
@@ -77,6 +74,33 @@ class Message:
             f.name: make_field(f.type, dct.get(f.name))
             for f in dataclasses.fields(cls)
         })
+
+
+@dataclass(unsafe_hash=True)
+class SlotValue(JSONish):
+    """A (slot number, value) pair, called "SV" in Chand."""
+    slot: Slot
+    value: Value
+
+
+@dataclass(unsafe_hash=True)
+class PValue(JSONish):
+    """As in Chand, a (ballot, slot, value) 3-tuple.
+
+    I think the name means "proposal value".
+    """
+    ballot: Ballot
+    slot: Slot
+    value: Value
+
+
+VotedSet: TypeAlias = dict[Slot, PValue]
+"""Tracks how Acceptors have voted."""
+
+
+class Message(JSONish):
+    """Base class for Paxos protocol requests and replies."""
+    pass
 
 
 @dataclass(unsafe_hash=True)
@@ -96,7 +120,7 @@ class Prepare(Message):
     # "from" in Chand.
     from_port: int
     # "bal" in Chand.
-    ballot: BallotNumber
+    ballot: Ballot
 
 
 @dataclass(unsafe_hash=True)
@@ -105,7 +129,7 @@ class Promise(Message):
     # "from" in Chand.
     from_port: int
     # "bal" in Chand.
-    ballot: BallotNumber
+    ballot: Ballot
     voted: VotedSet
 
 
@@ -115,9 +139,9 @@ class Accept(Message):
     # "from" in Chand.
     from_port: int
     # "bal" in Chand.
-    ballot: BallotNumber
+    ballot: Ballot
     # "propSV" in Chand. A logical set, but JSON requires a list.
-    voted: list[SV]
+    voted: list[SlotValue]
 
 
 @dataclass(unsafe_hash=True)

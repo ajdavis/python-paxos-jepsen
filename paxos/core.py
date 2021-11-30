@@ -87,9 +87,9 @@ class Proposer(Agent):
         self._propose_url = propose_url
         self._accept_url = accept_url
         # "pBal" in Chand.
-        self._ballot_number: BallotNumber = 0
+        self._ballot_number: Ballot = 0
         # Clients waiting for a response.
-        self._futures: dict[BallotNumber, Future[Message]] = {}
+        self._futures: dict[Ballot, Future[Message]] = {}
         # The replicated state machine (RSM) is just an appendable list of ints.
         self._state: list[int] = []
 
@@ -115,8 +115,8 @@ class Proposer(Agent):
                 # Highest-ballot-numbered value for each slot.
                 slot_values = max_sv([p.voted for p in promises])
                 # Choose a new slot for the client's value.
-                new_slot = max((sv[0] for sv in slot_values), default=0) + 1
-                slot_values.add((new_slot, entry.message.new_value))
+                new_slot = max((sv.slot for sv in slot_values), default=0) + 1
+                slot_values.add(SlotValue(new_slot, entry.message.new_value))
 
                 accept = Accept(
                     self._port, self._ballot_number, list(slot_values))
@@ -142,7 +142,7 @@ class Proposer(Agent):
 
 
 # Fig. 4 of Chand, auxiliary operators.
-def max_sv(vs: Sequence[VotedSet]) -> set[SV]:
+def max_sv(vs: Sequence[VotedSet]) -> set[SlotValue]:
     """(slot, val) with highest-ballot-numbered value for each slot.
 
     Incoming vs is a list of dicts, which map slot to highest-balloted PValue,
@@ -151,15 +151,15 @@ def max_sv(vs: Sequence[VotedSet]) -> set[SV]:
 
     See test_max_sv().
     """
-    slot_to_ballot_value: dict[SlotNumber, tuple[BallotNumber, Value]] = {}
+    slot_to_ballot_value: dict[Slot, tuple[Ballot, Value]] = {}
     for v in vs:
         for slot, pvalue in v.items():
-            assert pvalue[1] == slot
-            ballot, _, value = pvalue
-            if slot_to_ballot_value.get(slot, (-1, -1))[0] < ballot:
-                slot_to_ballot_value[slot] = (ballot, value)
+            assert pvalue.slot == slot
+            if slot_to_ballot_value.get(slot, (-1, -1))[0] < pvalue.ballot:
+                slot_to_ballot_value[slot] = (pvalue.ballot, pvalue.value)
 
-    return {(slot, value) for slot, (_, value) in slot_to_ballot_value.items()}
+    return {SlotValue(slot, value)
+            for slot, (_, value) in slot_to_ballot_value.items()}
 
 
 class Acceptor(Agent):
@@ -167,7 +167,7 @@ class Acceptor(Agent):
     def __init__(self, config: Config, port: int):
         super().__init__(config, port)
         # Highest ballot seen. "aBal" in Chand.
-        self._ballot_number: BallotNumber = -1
+        self._ballot_number: Ballot = -1
         # Highest ballot voted for per slot. "aVoted" in Chand. Grows forever.
         self._voted: VotedSet = {}
 
@@ -191,8 +191,8 @@ class Acceptor(Agent):
         assert accept.ballot >= self._ballot_number
         self._ballot_number = accept.ballot
         # TODO: right?
-        accept_voted_set = {slot: (accept.ballot, slot, value)
-                            for slot, value in accept.voted}
+        accept_voted_set = {sv.slot: PValue(accept.ballot, sv.slot, sv.value)
+                            for sv in accept.voted}
         self._voted.update(accept_voted_set)
         accepted = Accepted(self._port, self._ballot_number, accept.voted)
         future.set_result(accepted)

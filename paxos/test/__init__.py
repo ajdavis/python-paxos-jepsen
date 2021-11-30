@@ -41,8 +41,9 @@ class MessageTest(unittest.TestCase):
              C([B(A(1)), B(A(2))])),
             ('{"ballot": 2, "from_port": 5000}',
              Prepare(5000, 2)),
-            ('{"ballot": 2, "from_port": 5000, "voted": {"1": [1, 3, 4]}}',
-             Promise(5000, 2, {1: (1, 3, 4)}))
+            ('{"ballot": 2, "from_port": 5000, "voted": {"1":'
+             ' {"ballot": 1, "slot": 3, "value": 4}}}',
+             Promise(5000, 2, {1: PValue(1, 3, 4)}))
         ]:
             with self.subTest(str(obj)):
                 self.assertEqual(obj.__class__.from_dict(loads(jsn)), obj)
@@ -75,15 +76,15 @@ class MaxSVTest(unittest.TestCase):
         self.assertEqual(
             {
                 # (slot, value).
-                (1, 3),
-                (2, 5),
+                SlotValue(1, 3),
+                SlotValue(2, 5),
             },
             max_sv([{
                 # slot: (ballot, slot, value).
-                1: (1, 1, 2),  # Will be preempted by ballot 2 value 3 below.
-                2: (4, 2, 5),  # The chosen value for slot 2.
+                1: PValue(1, 1, 2),  # Will be preempted by ballot 2 below.
+                2: PValue(4, 2, 5),  # The chosen value for slot 2.
             }, {
-                1: (2, 1, 3),  # The chosen value for slot 1.
+                1: PValue(2, 1, 3),  # The chosen value for slot 1.
             }, {
-                2: (3, 2, 11)  # Preempted by ballot 4 value 5 above.
+                2: PValue(3, 2, 11)  # Preempted by ballot 4  above.
             }]))
