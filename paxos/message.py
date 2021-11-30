@@ -7,11 +7,11 @@ from typing import TypeAlias
 __all__ = [
     "Ballot",
     "Slot",
-    "Value",
     "SlotValue",
     "PValue",
     "VotedSet",
     "Message",
+    "Value",
     "ClientRequest",
     "ClientReply",
     "Prepare",
@@ -23,7 +23,6 @@ __all__ = [
 
 Ballot: TypeAlias = int
 Slot: TypeAlias = int
-Value: TypeAlias = int
 
 
 @dataclass(unsafe_hash=True)
@@ -79,6 +78,13 @@ class JSONish:
 
 
 @dataclass(unsafe_hash=True)
+class Value(JSONish):
+    client_id: int
+    command_id: int
+    payload: int
+
+
+@dataclass(unsafe_hash=True)
 class SlotValue(JSONish):
     """A (slot number, value) pair, called "SV" in Chand."""
     slot: Slot
@@ -107,8 +113,10 @@ class Message(JSONish):
 
 
 @dataclass(unsafe_hash=True)
-class ClientRequest(Message):
-    new_value: Value
+class ClientRequest(Message, Value):
+    def get_value(self) -> Value:
+        # In case a client request ever has more than a value.
+        return Value(**dataclasses.asdict(self))
 
 
 @dataclass(unsafe_hash=True)

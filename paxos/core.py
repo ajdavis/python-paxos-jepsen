@@ -97,21 +97,23 @@ class Proposer(Agent):
         # TODO: make a tuple (id, inc)
         self._ballot_number: Ballot = self._port
         # ClientRequests we haven't turned into Accept messages.
-        self._client_requests: deque[ClientRequest] = deque()
+        self._requests_unserviced: deque[ClientRequest] = deque()
         # Promise messages received from Acceptors.
         self._promises: dict[Ballot, list[Promise]] = defaultdict(list)
         # Accepted messages received from Acceptors.
         self._accepteds: dict[Ballot, list[Accepted]] = defaultdict(list)
-        # Slots with majority-accepted values.
-        self._decisions: dict[Slot, Value | None] = {}
+        # Map slot to value (None is undecided), and whether it's been applied.
+        self._decisions: dict[Slot, tuple[Value | None, bool]] = {}
         # Clients waiting for a response.
-        self._futures: dict[Ballot, Future[Message]] = {}
+        self._futures: dict[Value, Future[Message]] = {}
         # The replicated state machine (RSM) is just an appendable list of ints.
         self._state: list[int] = []
 
-    def _handle_client_request(self, client_request: ClientRequest) -> None:
+    def _handle_client_request(self, client_request: ClientRequest,
+                               future: Future[Message]) -> None:
         # Phase 1a, Fig. 2 of Chand.
-        self._client_requests.appendleft(client_request)
+        self._requests_unserviced.appendleft(client_request)
+        self._futures[client_request.get_value()] = future
         self._ballot_number += len(self._config.nodes)
         prepare = Prepare(self._port, self._ballot_number)
         self._send_to_all(self._propose_url, prepare)
@@ -124,15 +126,15 @@ class Proposer(Agent):
             # No majority yet.
             return
 
-        # TODO?
-        # self._promises.pop(promise.ballot)
+        self._promises.pop(promise.ballot)
         # Highest-ballot-numbered value for each slot.
         slot_values = max_sv([p.voted for p in promises])
         # Choose new slots for the client's values.
         new_slot = max((sv.slot for sv in slot_values), default=0) + 1
-        while self._client_requests:
-            cr = self._client_requests.pop()
-            slot_values.add(SlotValue(new_slot, cr.new_value))
+        while self._requests_unserviced:
+            # TODO: some circumstance where we should put it back?
+            cr = self._requests_unserviced.pop()
+            slot_values.add(SlotValue(new_slot, cr.get_value()))
             new_slot += 1
 
         accept = Accept(self._port, self._ballot_number, list(slot_values))
@@ -146,37 +148,46 @@ class Proposer(Agent):
             # No majority yet.
             return
 
-        undecided = self._min_undecided_slot()
+        self._accepteds.pop(accepted.ballot)
         for sv in accepted.voted:
-            self._decisions[sv.slot] = sv.value
+            if sv.slot not in self._decisions:
+                # TODO: do we need Applied for correctness?
+                self._decisions[sv.slot] = (sv.value, False)  # Applied=False.
 
         # Update the RSM with newly unblocked decisions.
-        while self._decisions.get(undecided) is not None:
-            self._perform(self._decisions[undecided])
-            undecided += 1
+        for slot, (value, applied) in sorted(self._decisions.items()):
+            if value is None:
+                # Still undecided, can't execute any later slots.
+                break
 
-        # TODO?
-        # self._accepteds.pop(accepted.ballot)
+            if applied:
+                continue
+
+            self._apply(value)
+            self._decisions[slot] = (value, True)  # Applied=True.
+
+    def _min_undecided_slot(self):
+        """First slot without a majority-accepted value."""
+        return min(
+            (s for s, v in self._decisions.items() if v is None),
+            default=len(self._decisions))
+
+    def _apply(self, value: Value):
+        """Actually update the RSM and reply to the client."""
+        self._state.append(value.payload)
+        self._futures.pop(value).set_result(ClientReply(self._state))
 
     def _main_loop(self, q: queue.Queue[Agent._QEntry]) -> None:
         while True:
             entry = q.get()
             if isinstance(entry.message, ClientRequest):
-                self._handle_client_request(entry.message)
+                self._handle_client_request(entry.message, entry.reply_future)
             elif isinstance(entry.message, Promise):
                 self._handle_promise(entry.message)
             elif isinstance(entry.message, Accepted):
                 self._handle_accepted(entry.message)
             else:
                 assert False, f"Unexpected {entry.message}"
-
-    def _min_undecided_slot(self):
-        return min(
-            (s for s, v in self._decisions.items() if v is None), default=1)
-
-    def _perform(self, new_value: int):
-        """Actually """
-        self._state.append(new_value)
 
 
 # Fig. 4 of Chand, auxiliary operators.
