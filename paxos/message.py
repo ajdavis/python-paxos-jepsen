@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import types
 import typing
 from dataclasses import dataclass
@@ -21,7 +22,6 @@ __all__ = [
     "OK",
 ]
 
-Ballot: TypeAlias = int
 Slot: TypeAlias = int
 
 
@@ -82,6 +82,23 @@ class Value(JSONish):
     client_id: int
     command_id: int
     payload: int
+
+
+@functools.total_ordering
+@dataclass(unsafe_hash=True)
+class Ballot(JSONish):
+    inc: int
+    server_id: int
+
+    @classmethod
+    def min(cls):
+        return cls(-1, -1)
+
+    def __lt__(self, other):
+        if not isinstance(other, Ballot):
+            return NotImplemented
+
+        return (self.inc, self.server_id) < (other.inc, other.server_id)
 
 
 @dataclass(unsafe_hash=True)

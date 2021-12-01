@@ -12,6 +12,7 @@ from network import send_to_all
 
 def main(raw_config: dict, payload: int, n_servers: int):
     config = Config(**raw_config)
+    assert n_servers <= len(config.nodes)
     servers = config.nodes[:n_servers]
     # pid is unique enough, all clients can use command_id 1.
     r = ClientRequest(client_id=os.getpid(),

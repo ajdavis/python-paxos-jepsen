@@ -69,18 +69,6 @@ class Agent:
         self.__executor.submit(
             send_to_all, self._config.nodes, url, dataclasses.asdict(message))
 
-    # def _send_to_all_and_recv(
-    #     self,
-    #     url: str,
-    #     message: Message,
-    #     reply_type: Type[Message]
-    # ) -> list[Message | None]:
-    #     """Send message to all nodes and get replies, omitting errors."""
-    #     replies = send_to_all(
-    #         self._config.nodes, url, dataclasses.asdict(message))
-    #     return [reply_type.from_dict(reply)
-    #             for reply in replies if reply is not None]
-
 
 class Proposer(Agent):
     """Proposer, also fulfilling the Learner role."""
@@ -93,14 +81,13 @@ class Proposer(Agent):
         super().__init__(config, port)
         self._propose_url = propose_url
         self._accept_url = accept_url
-        # "pBal" in Chand.
-        # TODO: make a tuple (id, inc)
-        self._ballot_number: Ballot = self._port
-        # ClientRequests we haven't turned into Accept messages.
+        # "pBal" in Chand. Include self._port for uniqueness.
+        self._ballot: Ballot = Ballot(1, self._port)
+        # ClientRequests we haven't used in Accept messages.
         self._requests_unserviced: deque[ClientRequest] = deque()
-        # Promise messages received from Acceptors.
+        # "Promise" messages received from Acceptors.
         self._promises: dict[Ballot, list[Promise]] = defaultdict(list)
-        # Accepted messages received from Acceptors.
+        # "Accepted" messages received from Acceptors.
         self._accepteds: dict[Ballot, list[Accepted]] = defaultdict(list)
         # Map slot to value (None is undecided), and whether it's been applied.
         self._decisions: dict[Slot, tuple[Value | None, bool]] = {}
@@ -115,8 +102,8 @@ class Proposer(Agent):
         # Phase 1a, Fig. 2 of Chand.
         self._requests_unserviced.appendleft(client_request)
         self._futures[client_request.get_value()] = future
-        self._ballot_number += len(self._config.nodes)
-        prepare = Prepare(self._port, self._ballot_number)
+        self._ballot.inc += 1
+        prepare = Prepare(self._port, self._ballot)
         self._send_to_all(self._propose_url, prepare)
 
     def _handle_promise(self,
@@ -141,7 +128,7 @@ class Proposer(Agent):
             slot_values.add(SlotValue(new_slot, cr.get_value()))
             new_slot += 1
 
-        accept = Accept(self._port, self._ballot_number, list(slot_values))
+        accept = Accept(self._port, self._ballot, list(slot_values))
         self._send_to_all(self._accept_url, accept)
 
     def _handle_accepted(self,
@@ -214,7 +201,8 @@ def max_sv(vs: Sequence[VotedSet]) -> set[SlotValue]:
     for v in vs:
         for slot, pvalue in v.items():
             assert pvalue.slot == slot
-            if slot_to_ballot_value.get(slot, (-1, -1))[0] < pvalue.ballot:
+            if (slot not in slot_to_ballot_value
+                    or slot_to_ballot_value[slot][0] < pvalue.ballot):
                 slot_to_ballot_value[slot] = (pvalue.ballot, pvalue.value)
 
     return {SlotValue(slot, value)
@@ -233,32 +221,32 @@ class Acceptor(Agent):
         self._promise_url = promise_url
         self._accepted_url = accepted_url
         # Highest ballot seen. "aBal" in Chand.
-        self._ballot_number: Ballot = -1
+        self._ballot: Ballot = Ballot.min()
         # Highest ballot voted for per slot. "aVoted" in Chand. Grows forever.
         self._voted: VotedSet = {}
 
     def _handle_prepare(self, prepare: Prepare) -> None:
         # Phase 1b, Fig. 3 in Chand.
-        if prepare.ballot <= self._ballot_number:
+        if prepare.ballot <= self._ballot:
             return
 
-        self._ballot_number = prepare.ballot
-        promise = Promise(self._port, self._ballot_number, self._voted)
+        self._ballot = prepare.ballot
+        promise = Promise(self._port, self._ballot, self._voted)
         self._send_to_all(self._promise_url, promise)
 
     def _handle_accept(self, accept: Accept) -> None:
         # Phase 2b, Fig. 5 in Chand. Note < for accept and <= for prepare.
-        if accept.ballot < self._ballot_number:
+        if accept.ballot < self._ballot:
             # Ignore.
             return
 
-        assert accept.ballot >= self._ballot_number
-        self._ballot_number = accept.ballot
+        assert accept.ballot >= self._ballot
+        self._ballot = accept.ballot
         # TODO: right?
         accept_voted_set = {sv.slot: PValue(accept.ballot, sv.slot, sv.value)
                             for sv in accept.voted}
         self._voted.update(accept_voted_set)
-        accepted = Accepted(self._port, self._ballot_number, accept.voted)
+        accepted = Accepted(self._port, self._ballot, accept.voted)
         self._send_to_all(self._accepted_url, accepted)
 
     def _main_loop(self, q: queue.Queue[Agent._QEntry]) -> None:
