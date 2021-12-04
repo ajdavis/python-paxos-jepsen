@@ -18,19 +18,13 @@
   (reify
    db/DB
    (setup! [_ test node]
-           (info node "installing Python-Paxos")
+           (info "installing Python-Paxos")
            ; Upload Paxos implementation's Python code.
-           ; I can't figure out how to scp -r the local code, so tar it locally and untar on remote.
-           (sh "rm" "-f" "/tmp/paxos.tar.gz")
-           (sh "tar" "czf" "/tmp/paxos.tar.gz" "../../paxos")
-           ; c/exec executes on each remote node.
-           (c/exec "rm" "-f" "paxos.tar.gz")
-           (c/upload "/tmp/paxos.tar.gz" "paxos.tar.gz")
-           (c/exec "tar" "-C" "~" "-xzf" "~/paxos.tar.gz")
+           (sh "rsync" "-e" "'ssh -o StrictHostKeyChecking=no'" "-az" "../../paxos" (str node ":"))
            ; Upload Python 3.9. See README for building Python.
            ; TODO: README instructions
-           (c/upload "/home/admin/python3.9.tar.gz" "python3.9.tar.gz")
-           (c/exec "tar" "--directory" "~" "-xzf" "/home/admin/python3.9.tar.gz")
+           (sh "rsync" "-e" "'ssh -o StrictHostKeyChecking=no'" "-az" "/home/admin/python3.9" (str node ":"))
+           ; Executed on the remote worker node.
            (c/exec "/home/admin/python3.9/bin/pip3" "install" "-r" "/home/admin/paxos/requirements.txt"))
 
    (teardown! [_ test node]
