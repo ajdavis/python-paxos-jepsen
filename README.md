@@ -9,7 +9,7 @@ Multi-Paxos for Distributed Consensus", Chand et al 2016. It has no stable leade
 protocol, no reconfiguration, no Fast Paxos. What it lacks in features it makes up for in bugs. It
 can't run very long since it uses more memory and passes larger messages with each operation.
 
-Requires Python 3.10 or later. Set up with `python3 -m pip install -r paxos/requirements.txt`.
+Requires Python 3.9 or later. Set up with `python3 -m pip install -r paxos/requirements.txt`.
 
 Run `python3 paxos/start-servers.py paxos/example-config.json` to start 3 servers. Their shared
 state is just an appendable list of ints, initially empty. (An appendable list is Jepsen's favorite
