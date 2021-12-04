@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import asdict, dataclass
+from typing import Optional
 
 from flask.json import dumps, loads
 
@@ -29,25 +30,48 @@ class D(Message):
 
 @dataclass
 class E(Message):
-    x: int | None
+    x: Optional[int]
 
 
 class MessageTest(unittest.TestCase):
     def test_from_dict(self):
         for jsn, obj in [
-            ('{"a": {"value": 1}}',
-             B(A(1))),
-            ('{"bs": [{"a": {"value": 1}}, {"a": {"value": 2}}]}',
-             C([B(A(1)), B(A(2))])),
-            ('{"ballot": 2, "from_port": 5000}',
-             Prepare(5000, 2)),
-            ('{"ballot": 2, "from_port": 5000, "voted": {"1":'
-             ' {"ballot": 1, "slot": 3, "value": 4}}}',
-             Promise(5000, 2, {1: PValue(1, 3, 4)}))
+            # ('{"a": {"value": 1}}',
+            #  B(A(1))),
+            # ('{"bs": [{"a": {"value": 1}}, {"a": {"value": 2}}]}',
+            #  C([B(A(1)), B(A(2))])),
+            ('{"ballot": {"inc": 2, "server_id": "foo"}, "from_port": 5000}',
+             Prepare(5000, Ballot(2, "foo"))),
+            ('''
+             {
+               "ballot": {
+                 "inc": 2,
+                 "server_id": "foo"
+               },
+               "from_port": 5000,
+               "voted": {
+                 "1": {
+                   "ballot": {
+                     "inc": 1,
+                     "server_id": "foo"
+                   },
+                   "slot": 3,
+                   "value": {
+                     "client_id": 4,
+                     "command_id": 5,
+                     "payload": 6
+                   }
+                 }
+               }
+             }''',
+             Promise(5000, Ballot(2, "foo"),
+                     {1: PValue(Ballot(1, "foo"), 3, Value(4, 5, 6))}))
         ]:
             with self.subTest(str(obj)):
+                # Test from_dict.
                 self.assertEqual(obj.__class__.from_dict(loads(jsn)), obj)
-                self.assertEqual(dumps(asdict(obj)), jsn)
+                # Test as_dict. Use dumps/loads to erase JSON whitespace diffs.
+                self.assertEqual(dumps(asdict(obj)), dumps(loads(jsn)))
 
     def test_extra_field(self):
         with self.assertRaises(ValueError):

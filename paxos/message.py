@@ -3,7 +3,6 @@ import functools
 import types
 import typing
 from dataclasses import dataclass
-from typing import TypeAlias
 
 __all__ = [
     "Ballot",
@@ -22,7 +21,7 @@ __all__ = [
     "OK",
 ]
 
-Slot: TypeAlias = int
+Slot = int
 
 
 @dataclass(unsafe_hash=True)
@@ -36,11 +35,11 @@ class JSONish:
             raise ValueError(f"extra fields for {cls.__name__}: {extra}")
 
         def make_field(typ, val):
-            if isinstance(typ, types.UnionType):
-                # Like "thing | None".
+            if getattr(typ, '__origin__', None) is typing.Union:
+                # Like "Union[str, int]" or "Optional[thing]".
                 errors = []
                 for subtype in typ.__args__:
-                    if issubclass(subtype, types.NoneType) and val is None:
+                    if issubclass(subtype, type(None)) and val is None:
                         return None
 
                     try:
@@ -88,11 +87,11 @@ class Value(JSONish):
 @dataclass(unsafe_hash=True)
 class Ballot(JSONish):
     inc: int
-    server_id: int
+    server_id: str
 
     @classmethod
     def min(cls):
-        return cls(-1, -1)
+        return cls(-1, "")
 
     def __lt__(self, other):
         if not isinstance(other, Ballot):
@@ -119,7 +118,7 @@ class PValue(JSONish):
     value: Value
 
 
-VotedSet: TypeAlias = dict[Slot, PValue]
+VotedSet = dict[Slot, PValue]
 """Tracks how Acceptors have voted."""
 
 

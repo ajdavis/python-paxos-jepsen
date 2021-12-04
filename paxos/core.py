@@ -1,9 +1,10 @@
 import dataclasses
 import logging
 import queue
+import uuid
 from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Sequence
+from typing import Optional, Sequence
 
 from dataclasses import dataclass
 
@@ -81,8 +82,8 @@ class Proposer(Agent):
         super().__init__(config, port)
         self._propose_url = propose_url
         self._accept_url = accept_url
-        # "pBal" in Chand. Include self._port for uniqueness.
-        self._ballot: Ballot = Ballot(1, self._port)
+        # "pBal" in Chand. Include a UUID to ensure a unique tiebreaker.
+        self._ballot: Ballot = Ballot(1, uuid.uuid4().hex)
         # ClientRequests we haven't used in Accept messages.
         self._requests_unserviced: deque[ClientRequest] = deque()
         # "Promise" messages received from Acceptors.
@@ -90,7 +91,7 @@ class Proposer(Agent):
         # "Accepted" messages received from Acceptors.
         self._accepteds: dict[Ballot, list[Accepted]] = defaultdict(list)
         # Map slot to value (None is undecided), and whether it's been applied.
-        self._decisions: dict[Slot, tuple[Value | None, bool]] = {}
+        self._decisions: dict[Slot, tuple[Optional[Value], bool]] = {}
         # Clients waiting for a response.
         self._futures: dict[Value, Future[Message]] = {}
         # The replicated state machine (RSM) is just an appendable list of ints.

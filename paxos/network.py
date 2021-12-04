@@ -1,9 +1,10 @@
 import concurrent.futures
 import requests
 import logging
+from typing import Optional
 
 
-def send(node: str, url: str, raw_message: dict) -> dict | None:
+def send(node: str, url: str, raw_message: dict) -> Optional[dict]:
     try:
         response = requests.post(f"http://{node}{url}",
                                  json=raw_message,
@@ -16,7 +17,7 @@ def send(node: str, url: str, raw_message: dict) -> dict | None:
 
 
 def send_to_all(
-        nodes: list[str], url: str, raw_message: dict) -> list[dict | None]:
+        nodes: list[str], url: str, raw_message: dict) -> list[Optional[dict]]:
     def send_one(node):
         return send(node, url, raw_message)
     with concurrent.futures.ThreadPoolExecutor() as executor:
