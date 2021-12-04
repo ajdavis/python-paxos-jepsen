@@ -141,6 +141,7 @@ class Proposer(Agent):
             return
 
         self._accepteds.pop(accepted.ballot)
+        # TODO: assert no conflicts among accepteds.
         for sv in accepted.voted:
             if sv.slot not in self._decisions:
                 # TODO: do we need Applied for correctness?
