@@ -18,9 +18,6 @@ __all__ = [
     "Acceptor",
 ]
 
-WINDOW = 1
-"""Number of slots we wait before executing a reconfiguration."""
-
 
 @dataclass
 class Config:
