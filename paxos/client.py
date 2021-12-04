@@ -28,7 +28,7 @@ def main(raw_config: dict, payload: int, n_servers: int):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Paxos client")
     parser.add_argument("config", type=argparse.FileType(),
-                        help="JSON config file (see example-config.json)")
+                        help="Config file (see example-config)")
     parser.add_argument("--servers", type=int, default=1,
                         help="Number of servers to send the message to")
     parser.add_argument("payload", type=int)

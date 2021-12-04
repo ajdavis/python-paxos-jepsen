@@ -30,6 +30,6 @@ def main(raw_config: dict, config_path: str):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Paxos orchestrator")
     parser.add_argument("config", type=argparse.FileType(),
-                        help="JSON config file (see example-config.json)")
+                        help="Config file (see example-config)")
     args = parser.parse_args()
     main(json.load(args.config), args.config.name)

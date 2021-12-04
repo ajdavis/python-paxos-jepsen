@@ -1,13 +1,16 @@
 import argparse
 import dataclasses
-import json
 import logging
 import os.path
+import signal
 import sys
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Type
 
+import requests
 from flask import Flask, jsonify, request
-from flask.logging import default_handler
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -23,10 +26,15 @@ The agents communicate with each other, and with agents in other server
 processes, via HTTP requests. Clients (see client.py) communicate with Replicas.
 """
 
-root = logging.getLogger()
-root.setLevel(logging.INFO)
-root.addHandler(default_handler)
 app = Flask('PyPaxos')
+
+server_id = uuid.uuid4().hex
+
+
+@app.route('/server_id', methods=['GET'])
+def get_server_id():
+    """Used to find self in configuration."""
+    return jsonify(server_id)
 
 
 @app.route('/proposer/client-request', methods=['POST'])
@@ -76,9 +84,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("Paxos node")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--config", type=argparse.FileType(), required=True,
-                        help="JSON config file (see example-config.json)")
+                        help="Config file (see example-config)")
+    parser.add_argument("--log-file", default=None)
+
     args = parser.parse_args()
-    config = Config(**json.load(args.config))
+
+    # Uses stdout/stderr if log_file is None.
+    logging.basicConfig(
+        filename=args.log_file,
+        format="[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
+        level=logging.INFO)
+    logger = logging.getLogger("server")
+
+    config = Config.from_file(args.config)
+    assert config.nodes
     proposer = Proposer(config=config,
                         port=args.port,
                         propose_url=reverse_url("prepare"),
@@ -89,4 +108,29 @@ if __name__ == "__main__":
                         promise_url=reverse_url("promise"),
                         accepted_url=reverse_url("accepted"))
     acceptor.run()
-    app.run(host="0.0.0.0", port=args.port)
+    # Run Flask app in background so we can do "finding self" logic below.
+    executor = ThreadPoolExecutor()
+    app_done = executor.submit(lambda: app.run(host="0.0.0.0", port=args.port))
+
+    logger.info("Finding self in config of %s nodes", len(config.nodes))
+    start = time.monotonic()
+    found_self = False
+    while time.monotonic() - start < 30 and not found_self:
+        for n in config.nodes:
+            node_url = f"http://{n}{reverse_url('get_server_id')}"
+            try:
+                if requests.get(node_url, timeout=30).json() == server_id:
+                    config.set_self(n)
+                    found_self = True
+                    logger.info("Found self: %s", n)
+                    break
+            except requests.RequestException:
+                time.sleep(1)
+                continue
+
+    if not found_self:
+        logger.error("Failed to find self in config")
+        # Simpler than the self-pipe trick, if brutal.
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    app_done.result()

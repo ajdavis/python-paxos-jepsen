@@ -11,13 +11,12 @@ can't run very long since it uses more memory and passes larger messages with ea
 
 Requires Python 3.9 or later. Set up with `python3 -m pip install -r paxos/requirements.txt`.
 
-Run `python3 paxos/start-servers.py paxos/example-config.json` to start 3 servers. Their shared
-state is just an appendable list of ints, initially empty. (An appendable list is Jepsen's favorite
-data structure for testing consistency.)
+Run `python3 paxos/start-servers.py paxos/example-config` to start 3 servers. Their shared state is
+just an appendable list of ints, initially empty. (An appendable list is Jepsen's favorite data
+structure for testing consistency.)
 
-Use `python3 paxos/client.py paxos/example-config.json 1` to append 1 (or a number of your choice)
-to the list of ints. My goal is to make this list a linearizable data structure, and test it with
-Jepsen.
+Use `python3 paxos/client.py paxos/example-config 1` to append 1 (or a number of your choice) to the
+list of ints. My goal is to make this list a linearizable data structure, and test it with Jepsen.
 
 ## Jepsen
 

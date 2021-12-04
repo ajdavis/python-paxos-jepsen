@@ -1,7 +1,7 @@
 import dataclasses
 import logging
 import queue
-import uuid
+import typing
 from collections import defaultdict, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Optional, Sequence
@@ -22,6 +22,22 @@ __all__ = [
 @dataclass
 class Config:
     nodes: list[str]
+    _me: Optional[str] = dataclasses.field(init=False)
+    _found_self: Future[str] = dataclasses.field(
+        default_factory=lambda: Future(), init=False)
+
+    @classmethod
+    def from_file(cls, config_file: typing.IO):
+        return Config([
+            line.strip() for line in config_file.readlines() if line.strip()])
+
+    def set_self(self, self_node: str):
+        """Set my entry in 'nodes'."""
+        self._found_self.set_result(self_node)
+
+    def get_self(self) -> str:
+        """Get my entry in 'nodes'. Blocks waiting for set_self()."""
+        return self._found_self.result()
 
 
 class Agent:
@@ -79,8 +95,8 @@ class Proposer(Agent):
         super().__init__(config, port)
         self._propose_url = propose_url
         self._accept_url = accept_url
-        # "pBal" in Chand. Include a UUID to ensure a unique tiebreaker.
-        self._ballot: Ballot = Ballot(1, uuid.uuid4().hex)
+        # "pBal" in Chand. Don't init until we can call get_self() w/o deadlock.
+        self._ballot: Optional[Ballot] = None
         # ClientRequests we haven't used in Accept messages.
         self._requests_unserviced: deque[ClientRequest] = deque()
         # "Promise" messages received from Acceptors.
@@ -100,6 +116,9 @@ class Proposer(Agent):
         # Phase 1a, Fig. 2 of Chand.
         self._requests_unserviced.appendleft(client_request)
         self._futures[client_request.get_value()] = future
+        if not self._ballot:
+            #  Include this server's URL as a unique tiebreaker.
+            self._ballot = Ballot(1, self._config.get_self())
         self._ballot.inc += 1
         prepare = Prepare(self._port, self._ballot)
         self._send_to_all(self._propose_url, prepare)
@@ -201,7 +220,7 @@ def max_sv(vs: Sequence[VotedSet]) -> set[SlotValue]:
         for slot, pvalue in v.items():
             assert pvalue.slot == slot
             if (slot not in slot_to_ballot_value
-                    or slot_to_ballot_value[slot][0] < pvalue.ballot):
+                or slot_to_ballot_value[slot][0] < pvalue.ballot):
                 slot_to_ballot_value[slot] = (pvalue.ballot, pvalue.value)
 
     return {SlotValue(slot, value)
