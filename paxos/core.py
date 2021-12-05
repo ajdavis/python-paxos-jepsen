@@ -48,8 +48,12 @@ class Agent:
         self._port = port
         self.__q: queue.Queue[Agent._QEntry] = queue.Queue()
         self.__executor = ThreadPoolExecutor()
+        
+    def get_uri(self) -> str:
+        """Like hostname:port. Can block awaiting Config.set_self()."""
+        return f'{self._config.get_self()}:{self._port}' 
 
-    def run(self):
+    def run(self) -> None:
         future = self.__executor.submit(self._main_loop, self.__q)
 
         def done_callback(f: Future):
@@ -80,8 +84,11 @@ class Agent:
 
     def _send_to_all(self, url: str, message: Message) -> None:
         """Send message to all nodes without awaiting reply."""
-        self.__executor.submit(
-            send_to_all, self._config.nodes, url, dataclasses.asdict(message))
+        self.__executor.submit(send_to_all, 
+                               self._port, 
+                               self._config.nodes, 
+                               url, 
+                               dataclasses.asdict(message))
 
 
 class Proposer(Agent):
@@ -120,7 +127,7 @@ class Proposer(Agent):
             #  Include this server's URL as a unique tiebreaker.
             self._ballot = Ballot(1, self._config.get_self())
         self._ballot.inc += 1
-        prepare = Prepare(self._port, self._ballot)
+        prepare = Prepare(self.get_uri(), self._ballot)
         self._send_to_all(self._propose_url, prepare)
 
     def _handle_promise(self,
@@ -145,7 +152,7 @@ class Proposer(Agent):
             slot_values.add(SlotValue(new_slot, cr.get_value()))
             new_slot += 1
 
-        accept = Accept(self._port, self._ballot, list(slot_values))
+        accept = Accept(self.get_uri(), self._ballot, list(slot_values))
         self._send_to_all(self._accept_url, accept)
 
     def _handle_accepted(self,
@@ -251,7 +258,7 @@ class Acceptor(Agent):
             return
 
         self._ballot = prepare.ballot
-        promise = Promise(self._port, self._ballot, self._voted)
+        promise = Promise(self.get_uri(), self._ballot, self._voted)
         self._send_to_all(self._promise_url, promise)
 
     def _handle_accept(self, accept: Accept) -> None:
@@ -266,7 +273,7 @@ class Acceptor(Agent):
         accept_voted_set = {sv.slot: PValue(accept.ballot, sv.slot, sv.value)
                             for sv in accept.voted}
         self._voted.update(accept_voted_set)
-        accepted = Accepted(self._port, self._ballot, accept.voted)
+        accepted = Accepted(self.get_uri(), self._ballot, accept.voted)
         self._send_to_all(self._accepted_url, accepted)
 
     def _main_loop(self, q: queue.Queue[Agent._QEntry]) -> None:

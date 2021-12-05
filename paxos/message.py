@@ -144,8 +144,8 @@ class ClientReply(Message):
 @dataclass(unsafe_hash=True)
 class Prepare(Message):
     """Phase 1a message."""
-    # "from" in Chand.
-    from_port: int
+    # "from" in Chand. Unused, could be nice for diagnostics.
+    from_uri: str
     # "bal" in Chand.
     ballot: Ballot
 
@@ -153,8 +153,8 @@ class Prepare(Message):
 @dataclass(unsafe_hash=True)
 class Promise(Message):
     """Phase 1b message."""
-    # "from" in Chand.
-    from_port: int
+    # "from" in Chand. Unused, could be nice for diagnostics.
+    from_uri: str
     # "bal" in Chand.
     ballot: Ballot
     voted: VotedSet
@@ -163,8 +163,8 @@ class Promise(Message):
 @dataclass(unsafe_hash=True)
 class Accept(Message):
     """Command an acceptor to accept! Phase 2a message."""
-    # "from" in Chand.
-    from_port: int
+    # "from" in Chand. Unused, could be nice for diagnostics.
+    from_uri: str
     # "bal" in Chand.
     ballot: Ballot
     # "propSV" in Chand. A logical set, but JSON requires a list.

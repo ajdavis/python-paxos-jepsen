@@ -7,7 +7,7 @@ import sys
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Type
+from typing import Optional, Type
 
 import requests
 from flask import Flask, jsonify, request
@@ -82,7 +82,7 @@ def reverse_url(endpoint: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Paxos node")
-    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--config", type=argparse.FileType(), required=True,
                         help="Config file (see example-config)")
     parser.add_argument("--log-file", default=None)
@@ -115,21 +115,23 @@ if __name__ == "__main__":
     logger.info("Finding self in config of %s nodes", len(config.nodes))
     start = time.monotonic()
     found_self = False
-    while time.monotonic() - start < 30 and not found_self:
+    reason: Optional[Exception] = None
+    while time.monotonic() - start < 20 * len(config.nodes) and not found_self:
         for n in config.nodes:
-            node_url = f"http://{n}{reverse_url('get_server_id')}"
+            node_url = f"http://{n}:{args.port}{reverse_url('get_server_id')}"
             try:
-                if requests.get(node_url, timeout=30).json() == server_id:
+                if requests.get(node_url, timeout=10).json() == server_id:
                     config.set_self(n)
                     found_self = True
                     logger.info("Found self: %s", n)
                     break
-            except requests.RequestException:
+            except requests.RequestException as exc:
+                reason = exc
                 time.sleep(1)
                 continue
 
     if not found_self:
-        logger.error("Failed to find self in config")
+        logger.error("Failed to find self in config, reason: %s", reason)
         # Simpler than the self-pipe trick, if brutal.
         os.kill(os.getpid(), signal.SIGTERM)
 

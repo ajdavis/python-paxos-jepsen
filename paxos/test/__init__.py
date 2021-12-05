@@ -40,15 +40,15 @@ class MessageTest(unittest.TestCase):
             #  B(A(1))),
             # ('{"bs": [{"a": {"value": 1}}, {"a": {"value": 2}}]}',
             #  C([B(A(1)), B(A(2))])),
-            ('{"ballot": {"inc": 2, "server_id": "foo"}, "from_port": 5000}',
-             Prepare(5000, Ballot(2, "foo"))),
+            ('{"ballot": {"inc": 2, "server_id": "foo"}, "from_uri": "host:1"}',
+             Prepare("host:1", Ballot(2, "foo"))),
             ('''
              {
                "ballot": {
                  "inc": 2,
                  "server_id": "foo"
                },
-               "from_port": 5000,
+               "from_uri": "host:1",
                "voted": {
                  "1": {
                    "ballot": {
@@ -64,7 +64,7 @@ class MessageTest(unittest.TestCase):
                  }
                }
              }''',
-             Promise(5000, Ballot(2, "foo"),
+             Promise("host:1", Ballot(2, "foo"),
                      {1: PValue(Ballot(1, "foo"), 3, Value(4, 5, 6))}))
         ]:
             with self.subTest(str(obj)):
