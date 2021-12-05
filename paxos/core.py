@@ -167,6 +167,8 @@ class Proposer(Agent):
                 self._decisions[sv.slot] = (sv.value, False)  # Applied=False.
 
         # Update the RSM with newly unblocked decisions.
+        # TODO: don't think this is right. Some proposals for lower slots could
+        # still be undecided. Should propose None for those and await decision?
         for slot, (value, applied) in sorted(self._decisions.items()):
             if value is None:
                 # Still undecided, can't execute any later slots.
