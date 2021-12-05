@@ -48,12 +48,16 @@
                    "/home/admin/python-paxos-jepsen/paxos/requirements.txt")
            (info "starting daemon")
            (c/su
-            (c/exec "/bin/bash" "/home/admin/python-paxos-jepsen/start-daemon.sh")))
+            (c/exec "/bin/bash" "/home/admin/python-paxos-jepsen/start-daemon.sh"))
+           (Thread/sleep 10000))
    (teardown! [_ test node]
               (info node "tearing down Paxos")
               (c/su
                (c/exec "/sbin/start-stop-daemon" "--stop" "--pidfile" "/var/paxos.pid" "--exec"
-                       "/home/admin/python3.9/bin/python3.9" "--oknodo")))))
+                       "/home/admin/python3.9/bin/python3.9" "--oknodo")))
+   db/LogFiles
+   (log-files [_ test node]
+              ["/home/admin/paxos.log"])))
 
 (defn paxos-test
   "Given an options map from the command line runner (e.g. :nodes, :ssh,
