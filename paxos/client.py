@@ -5,31 +5,35 @@ import sys
 import typing
 import logging
 
+from message import ClientReply
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from core import ClientRequest, Config
-from network import send_to_all
+from network import send
 
 logging.basicConfig()
 
 
-def main(raw_config: typing.IO, port: int, payload: int, n_servers: int):
+def main(raw_config: typing.IO, port: int, payload: int):
     config = Config.from_file(raw_config)
-    assert n_servers <= len(config.nodes)
-    nodes = config.nodes[:n_servers]
+    node = config.nodes[0]
     # pid is unique enough, all clients can use command_id 1.
     r = ClientRequest(client_id=os.getpid(),
                       command_id=1,
                       payload=payload)
-    replies = send_to_all(
-        nodes=nodes,
+
+    # TODO: retry on other servers.
+    raw_reply = send(
+        node=node,
         port=port,
         url='/proposer/client-request',
         raw_message=dataclasses.asdict(r),
         timeout=120)
 
-    for r in replies:
-        print(r)
+    reply = ClientReply.from_dict(raw_reply)
+    # Like "[1, 2, 3]".
+    print(reply.state)
 
 
 if __name__ == '__main__':
@@ -37,8 +41,6 @@ if __name__ == '__main__':
     parser.add_argument("config", type=argparse.FileType(),
                         help="Config file (see example-config)")
     parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("--servers", type=int, default=1,
-                        help="Number of servers to send the message to")
     parser.add_argument("payload", type=int)
     args = parser.parse_args()
-    main(args.config, args.port, args.payload, args.servers)
+    main(args.config, args.port, args.payload)

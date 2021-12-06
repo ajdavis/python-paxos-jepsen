@@ -1,19 +1,25 @@
 (ns jepsen.paxos
-  (:require [clojure.tools.logging :refer :all]
+  (:require [clojure.data.json :as json]
+            [clojure.tools.logging :refer :all]
             [clojure.string :as str]
             [jepsen
+             [checker :as checker]
              [cli :as cli]
              [client :as client]
              [control :as c]
              [db :as db]
              [generator :as gen]
              [tests :as tests]]
+            [jepsen.checker.timeline :as timeline]
             [jepsen.control.util :as cu]
-            [jepsen.os.debian :as debian]))
+            [jepsen.os.debian :as debian]
+            [knossos.model :as model])
+  (:import (knossos.model Model)))
 
-(use 'clojure.string)
 (use
-  '[clojure.java.shell :only [sh]])
+ '[clojure.string :only [trim]])
+(use
+ '[clojure.java.shell :only [sh]])
 
 (defn call-shell
   [& args]
@@ -62,25 +68,49 @@
    (log-files [_ test node]
               ["/home/admin/paxos.log"])))
 
-(defn paxos-client-write
+(defn paxos-client-append
+  "Append value to the shared state (a vector of ints) and return the new state."
   [value]
-  (call-shell "/home/admin/python3.9/bin/python3.9"
-              "/home/admin/python-paxos-jepsen/paxos/client.py"
-              "/home/admin/nodes" (str value)))
+  (json/read-str
+   (call-shell "/home/admin/python3.9/bin/python3.9"
+               "/home/admin/python-paxos-jepsen/paxos/client.py"
+               "/home/admin/nodes" (str value))))
 
 (defrecord Client [conn]
   client/Client
   (open! [this test node] this)
   (setup! [this test])
   (invoke! [this test op]
-    (println "op" op)
-    (case (:f op) :write (do
-                           (info (paxos-client-write (:value op)))
-                           (assoc op :type :ok))))
+    ; Append is the only operation. The input int (:value op) is appended to the shared state.
+    ; The new value and new shared state (from the server reply) are stored as the new :value
+    ; for the sake of the AppendableList model, below.
+    (assert (= (:f op) :append))
+    (let [new-state (paxos-client-append (:value op))]
+      (assoc op :type :ok, :value {:new-state new-state :appended-value (:value op)})))
   (teardown! [this test])
   (close! [_ test]))
 
-(defn write-op [_ _] {:type :invoke, :f :write, :value 1})
+(defn append-op [_ _]
+  ; TODO: unique values.
+  {:type :invoke, :f :append, :value (rand-int 10000000)})
+
+; A Knossos model, validates that the Paxos system's state (which is an appendable vector of ints)
+; behaves as it ought.
+(defrecord AppendableList [state]
+  Model
+  (step [model op]
+    (assert (= (:f op) :append))
+    (let [appended-value    (:appended-value (:value op))
+          actual-post-value (:new-state (:value op))]
+      (if (= actual-post-value (conj state appended-value))
+        (AppendableList. actual-post-value)
+        (knossos.model/inconsistent
+         (str "model value: " state ", op: " (:value op)))))))
+
+(defn appendable-list
+  "Make an empty AppendableList."
+  []
+  (AppendableList. []))
 
 (defn paxos-test
   "Given an options map from the command line runner (e.g. :nodes, :ssh,
@@ -93,10 +123,17 @@
           :os              debian/os
           :db              (db)
           :client          (Client. nil)
-          :generator       (->> write-op
+          ; TODO: concurrent generator like https://github.com/jepsen-io/jepsen/issues/197 ?
+          :generator       (->> append-op
                                 (gen/stagger 1)
                                 (gen/nemesis nil)
-                                (gen/time-limit 15))
+                                (gen/time-limit 5))
+          ; Use Knossos checker because it's in the tutorial. TODO: try Elle.
+          :checker         (checker/linearizable
+                            {:model     (appendable-list)
+                             :algorithm :linear})
+          ; TODO: debug IllegalArgumentException, enable HTML timeline.
+          ; :timeline        (timeline/html)
           :pure-generators true}))
 
 (defn -main
