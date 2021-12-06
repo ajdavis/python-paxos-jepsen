@@ -18,6 +18,8 @@ __all__ = [
     "Acceptor",
 ]
 
+_logger = logging.getLogger("paxos")
+
 
 @dataclass
 class Config:
@@ -48,10 +50,10 @@ class Agent:
         self._port = port
         self.__q: queue.Queue[Agent._QEntry] = queue.Queue()
         self.__executor = ThreadPoolExecutor()
-        
+
     def get_uri(self) -> str:
         """Like hostname:port. Can block awaiting Config.set_self()."""
-        return f'{self._config.get_self()}:{self._port}' 
+        return f'{self._config.get_self()}:{self._port}'
 
     def run(self) -> None:
         future = self.__executor.submit(self._main_loop, self.__q)
@@ -66,10 +68,7 @@ class Agent:
 
     def receive(self, message: Message) -> Message:
         """Handle a request, return the reply."""
-        logging.getLogger("paxos").info(
-            "%s port %d got %s", self.__class__.__name__, self._port,
-            message)
-
+        _logger.info("%s got %s", self.__class__.__name__, message)
         future = Future()
         self.__q.put(Agent._QEntry(message, future))
         return future.result()
@@ -84,11 +83,12 @@ class Agent:
 
     def _send_to_all(self, url: str, message: Message) -> None:
         """Send message to all nodes without awaiting reply."""
-        self.__executor.submit(send_to_all, 
-                               self._port, 
-                               self._config.nodes, 
-                               url, 
-                               dataclasses.asdict(message))
+        _logger.info("Send %s to all nodes, url %s", message, url)
+        self.__executor.submit(send_to_all,
+                               nodes=self._config.nodes,
+                               port=self._port,
+                               url=url,
+                               raw_message=dataclasses.asdict(message))
 
 
 class Proposer(Agent):

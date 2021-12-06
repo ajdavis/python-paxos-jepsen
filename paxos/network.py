@@ -3,24 +3,48 @@ import requests
 import logging
 from typing import Optional
 
+_logger = logging.getLogger("network")
 
-def send(node: str, port: int, url: str, raw_message: dict) -> Optional[dict]:
+
+def send(
+    *, node: str, port: int, url: str, raw_message: dict, timeout: int = 10
+) -> Optional[dict]:
+    """Post JSON and return response or None on error.
+
+    Timeout is in seconds.
+    """
     try:
-        response = requests.post(f"http://{node}{url}:{port}",
+        # Make sure url starts with "/".
+        full_url = f"http://{node}:{port}/{url.lstrip('/')}"
+        response = requests.post(full_url,
                                  json=raw_message,
-                                 timeout=10)  # 10 seconds.
+                                 timeout=timeout)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as exc:
-        logging.getLogger("requests").warning(exc)
+        _logger.warning(exc)
         # If post() or raise_for_status() threw, return None.
 
 
 def send_to_all(
-    nodes: list[str], port: int, url: str, raw_message: dict
+    *,
+    nodes: list[str],
+    port: int,
+    url: str,
+    raw_message: dict,
+    timeout: int = 10
 ) -> list[Optional[dict]]:
+    """Post JSON concurrently to all servers, and return gathered responses.
+
+    Timeout is in seconds. Each response is a dict, or None on error.
+    """
+
     def send_one(node):
-        return send(node, port, url, raw_message)
+        return send(node=node,
+                    port=port,
+                    url=url,
+                    raw_message=raw_message,
+                    timeout=timeout)
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         return list(executor.map(send_one, nodes))
