@@ -5,5 +5,5 @@
   :main jepsen.paxos
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "2.4.0"]
-                 [jepsen "0.2.1-SNAPSHOT"]]
+                 [jepsen "0.2.3"]]
   :repl-options {:init-ns jepsen.paxos})
