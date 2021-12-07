@@ -29,9 +29,19 @@ class Config:
         default_factory=lambda: Future(), init=False)
 
     @classmethod
-    def from_file(cls, config_file: typing.IO):
-        return Config([
-            line.strip() for line in config_file.readlines() if line.strip()])
+    def from_file(cls, config_file: typing.IO, default_port: int):
+        def gen():
+            for line in config_file.readlines():
+                line = line.strip()
+                if not line:
+                    continue
+
+                if ":" in line:
+                    yield line
+                else:
+                    yield f"{line}:{default_port}"
+
+        return Config(list(gen()))
 
     def set_self(self, self_node: str):
         """Set my entry in 'nodes'."""
@@ -45,15 +55,14 @@ class Config:
 class Agent:
     """An agent (or "process") fulfilling a role in the Paxos protocol."""
 
-    def __init__(self, config: Config, port: int):
+    def __init__(self, config: Config):
         self._config = config
-        self._port = port
         self.__q: queue.Queue[Agent._QEntry] = queue.Queue()
         self.__executor = ThreadPoolExecutor()
 
     def get_uri(self) -> str:
         """Like hostname:port. Can block awaiting Config.set_self()."""
-        return f'{self._config.get_self()}:{self._port}'
+        return self._config.get_self()
 
     def run(self) -> None:
         future = self.__executor.submit(self._main_loop, self.__q)
@@ -86,7 +95,6 @@ class Agent:
         _logger.info("Send %s to all nodes, url %s", message, url)
         self.__executor.submit(send_to_all,
                                nodes=self._config.nodes,
-                               port=self._port,
                                url=url,
                                raw_message=dataclasses.asdict(message))
 
@@ -96,10 +104,9 @@ class Proposer(Agent):
 
     def __init__(self,
                  config: Config,
-                 port: int,
                  propose_url: str,
                  accept_url: str):
-        super().__init__(config, port)
+        super().__init__(config)
         self._propose_url = propose_url
         self._accept_url = accept_url
         # "pBal" in Chand. Don't init until we can call get_self() w/o deadlock.
@@ -117,17 +124,24 @@ class Proposer(Agent):
         # The replicated state machine (RSM) is just an appendable list of ints.
         self._state: list[int] = []
 
+    def _get_ballot(self, should_inc: bool):
+        if not self._ballot:
+            #  Include this server's URL as a unique tiebreaker.
+            self._ballot = Ballot(0, self._config.get_self())
+
+        if should_inc:
+            self._ballot.inc += 1
+
+        # If we expected concurrent calls we should lock & return a copy.
+        return self._ballot
+
     def _handle_client_request(self,
                                client_request: ClientRequest,
                                future: Future[Message]) -> None:
         # Phase 1a, Fig. 2 of Chand.
         self._requests_unserviced.appendleft(client_request)
         self._futures[client_request.get_value()] = future
-        if not self._ballot:
-            #  Include this server's URL as a unique tiebreaker.
-            self._ballot = Ballot(1, self._config.get_self())
-        self._ballot.inc += 1
-        prepare = Prepare(self.get_uri(), self._ballot)
+        prepare = Prepare(self.get_uri(), self._get_ballot(should_inc=True))
         self._send_to_all(self._propose_url, prepare)
 
     def _handle_promise(self,
@@ -147,12 +161,11 @@ class Proposer(Agent):
         # Choose new slots for the client's values.
         new_slot = max((sv.slot for sv in slot_values), default=0) + 1
         while self._requests_unserviced:
-            # TODO: some circumstance where we should put it back?
             cr = self._requests_unserviced.pop()
             slot_values.add(SlotValue(new_slot, cr.get_value()))
             new_slot += 1
 
-        accept = Accept(self.get_uri(), self._ballot, list(slot_values))
+        accept = Accept(self.get_uri(), promise.ballot, list(slot_values))
         self._send_to_all(self._accept_url, accept)
 
     def _handle_accepted(self,
@@ -241,10 +254,9 @@ class Acceptor(Agent):
 
     def __init__(self,
                  config: Config,
-                 port: int,
                  promise_url: str,
                  accepted_url: str):
-        super().__init__(config, port)
+        super().__init__(config)
         self._promise_url = promise_url
         self._accepted_url = accepted_url
         # Highest ballot seen. "aBal" in Chand.

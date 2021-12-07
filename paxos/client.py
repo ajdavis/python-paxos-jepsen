@@ -15,21 +15,19 @@ from network import send
 logging.basicConfig()
 
 
-def main(raw_config: typing.IO, port: int, payload: int):
-    config = Config.from_file(raw_config)
-    node = config.nodes[0]
+def main(raw_config: typing.IO, port: int, server: int, payload: int):
+    config = Config.from_file(raw_config, default_port=port)
+    node = config.nodes[server]
     # pid is unique enough, all clients can use command_id 1.
     r = ClientRequest(client_id=os.getpid(),
                       command_id=1,
                       payload=payload)
 
-    # TODO: retry on other servers.
     raw_reply = send(
         node=node,
-        port=port,
         url='/proposer/client-request',
         raw_message=dataclasses.asdict(r),
-        timeout=120)
+        timeout=20)
 
     if raw_reply is None:
         sys.exit(1)
@@ -41,9 +39,15 @@ def main(raw_config: typing.IO, port: int, payload: int):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Paxos client")
-    parser.add_argument("config", type=argparse.FileType(),
-                        help="Config file (see example-config)")
-    parser.add_argument("--port", type=int, default=5000)
-    parser.add_argument("payload", type=int)
+    parser.add_argument(
+        "config", type=argparse.FileType(),
+        help="Config file (see example-config)")
+    parser.add_argument(
+        "--port", type=int, default=5000)
+    parser.add_argument(
+        "--server", type=int, default=0,
+        help="Server number (0 through number of nodes in config)")
+    parser.add_argument(
+        "payload", type=int)
     args = parser.parse_args()
-    main(args.config, args.port, args.payload)
+    main(args.config, args.port, args.server, args.payload)

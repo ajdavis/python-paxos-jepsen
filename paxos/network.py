@@ -7,7 +7,7 @@ _logger = logging.getLogger("network")
 
 
 def send(
-    *, node: str, port: int, url: str, raw_message: dict, timeout: int = 10
+    *, node: str, url: str, raw_message: dict, timeout: int = 5
 ) -> Optional[dict]:
     """Post JSON and return response or None on error.
 
@@ -15,7 +15,7 @@ def send(
     """
     try:
         # Make sure url starts with "/".
-        full_url = f"http://{node}:{port}/{url.lstrip('/')}"
+        full_url = f"http://{node}/{url.lstrip('/')}"
         response = requests.post(full_url,
                                  json=raw_message,
                                  timeout=timeout)
@@ -29,19 +29,18 @@ def send(
 def send_to_all(
     *,
     nodes: list[str],
-    port: int,
     url: str,
     raw_message: dict,
     timeout: int = 10
 ) -> list[Optional[dict]]:
     """Post JSON concurrently to all servers, and return gathered responses.
 
-    Timeout is in seconds. Each response is a dict, or None on error.
+    Nodes is a list of ["host:port", ...]. Timeout is in seconds. Each response
+    is a dict, or None on error.
     """
 
     def send_one(node):
         return send(node=node,
-                    port=port,
                     url=url,
                     raw_message=raw_message,
                     timeout=timeout)

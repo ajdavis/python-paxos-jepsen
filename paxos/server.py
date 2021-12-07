@@ -68,8 +68,12 @@ def accepted():
 
 
 def handle(agent: Agent, message_type: Type[Message]):
-    return jsonify(
-        dataclasses.asdict(agent.receive(message_type.from_dict(request.json))))
+    try:
+        return jsonify(dataclasses.asdict(
+                agent.receive(message_type.from_dict(request.json))))
+    except Exception:
+        logging.error("Processing input: %s", request.json)
+        raise
 
 
 def reverse_url(endpoint: str):
@@ -96,15 +100,13 @@ if __name__ == "__main__":
         level=logging.INFO)
     logger = logging.getLogger("server")
 
-    config = Config.from_file(args.config)
+    config = Config.from_file(args.config, default_port=args.port)
     assert config.nodes
     proposer = Proposer(config=config,
-                        port=args.port,
                         propose_url=reverse_url("prepare"),
                         accept_url=reverse_url("accept"))
     proposer.run()
     acceptor = Acceptor(config=config,
-                        port=args.port,
                         promise_url=reverse_url("promise"),
                         accepted_url=reverse_url("accepted"))
     acceptor.run()
@@ -118,7 +120,7 @@ if __name__ == "__main__":
     reason: Optional[Exception] = None
     while time.monotonic() - start < 20 * len(config.nodes) and not found_self:
         for n in config.nodes:
-            node_url = f"http://{n}:{args.port}{reverse_url('get_server_id')}"
+            node_url = f"http://{n}{reverse_url('get_server_id')}"
             try:
                 if requests.get(node_url, timeout=10).json() == server_id:
                     config.set_self(n)
