@@ -133,11 +133,11 @@
                                 (gen/nemesis nil)
                                 (gen/time-limit 5))
           ; Use Knossos checker because it's in the tutorial. TODO: try Elle.
-          :checker         (checker/linearizable
-                            {:model     (appendable-list)
-                             :algorithm :linear})
-          ; TODO: debug IllegalArgumentException, enable HTML timeline.
-          ; :timeline        (timeline/html)
+          :checker         (checker/compose
+                             {:linear   (checker/linearizable
+                                         {:model     (appendable-list)
+                                          :algorithm :linear})
+                              :timeline (timeline/html)})
           :pure-generators true}))
 
 (defn -main
