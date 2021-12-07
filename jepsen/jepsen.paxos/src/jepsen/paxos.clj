@@ -33,7 +33,9 @@
   [& args]
   (apply call-shell
          (concat
-          (list "rsync" "-e" "/usr/bin/ssh '-o StrictHostKeyChecking=no'" "-az")
+          ; The usual rsync -i doesn't work for me on Debian 10? Use rsync -e "ssh -i ...".
+          (list "rsync" "-e" "/usr/bin/ssh -o StrictHostKeyChecking=no -i /home/admin/.ssh/python-paxos-jepsen.pem"
+                "-az")
           args)))
 
 (defn db
@@ -41,28 +43,30 @@
   []
   (reify
    db/DB
+
    (setup! [_ test node]
            (info "installing Python-Paxos, rsyncing code and config")
            ; Upload this code and config file to worker node.
            (rsync "/home/admin/python-paxos-jepsen/"
                   (str node ":python-paxos-jepsen"))
            (rsync "../../../nodes" (str node ":"))
-           ; Upload Python 3.9. See README for building Python.
-           ; TODO: README instructions
-           (rsync "/home/admin/python3.9" (str node ":"))
-           ; Executed on the remote worker node.
            (info "pip-installing requirements")
-           (c/exec "/home/admin/python3.9/bin/pip3" "install" "-r"
+           ; Local pip install, for client.py.
+           (call-shell "python3.9" "-m" "pip" "install" "-r"
+                       "/home/admin/python-paxos-jepsen/paxos/requirements.txt")
+           ; Executed on the remote worker node.
+           (c/exec "python3.9" "-m" "pip" "install" "-r"
                    "/home/admin/python-paxos-jepsen/paxos/requirements.txt")
            (info "starting daemon")
            (c/su
             (c/exec "/bin/bash" "/home/admin/python-paxos-jepsen/start-daemon.sh"))
            (Thread/sleep 10000))
+
    (teardown! [_ test node]
               (info node "tearing down Paxos")
               (c/su
                (c/exec "/sbin/start-stop-daemon" "--stop" "--pidfile" "/var/paxos.pid" "--exec"
-                       "/home/admin/python3.9/bin/python3.9" "--oknodo")))
+                       "/usr/local/bin/python3.9" "--oknodo")))
 
    db/LogFiles
    (log-files [_ test node]
@@ -72,7 +76,7 @@
   "Append value to the shared state (a vector of ints) and return the new state."
   [value]
   (json/read-str
-   (call-shell "/home/admin/python3.9/bin/python3.9"
+   (call-shell "/usr/local/bin/python3.9"
                "/home/admin/python-paxos-jepsen/paxos/client.py"
                "/home/admin/nodes" (str value))))
 

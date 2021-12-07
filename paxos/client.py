@@ -31,6 +31,9 @@ def main(raw_config: typing.IO, port: int, payload: int):
         raw_message=dataclasses.asdict(r),
         timeout=120)
 
+    if raw_reply is None:
+        sys.exit(1)
+
     reply = ClientReply.from_dict(raw_reply)
     # Like "[1, 2, 3]".
     print(reply.state)
