@@ -74,11 +74,11 @@
 
 (defn paxos-client-append
   "Append value to the shared state (a vector of ints) and return the new state."
-  [value]
+  [process-id value nodes-count]
   (json/read-str
    (call-shell "/usr/local/bin/python3.9"
                "/home/admin/python-paxos-jepsen/paxos/client.py"
-               "/home/admin/nodes" (str value))))
+               "/home/admin/nodes" "--server" (str (mod process-id nodes-count)) (str value))))
 
 (defrecord Client [conn]
   client/Client
@@ -89,7 +89,7 @@
     ; The new value and new shared state (from the server reply) are stored as the new :value
     ; for the sake of the AppendableList model, below.
     (assert (= (:f op) :append))
-    (let [new-state (paxos-client-append (:value op))]
+    (let [new-state (paxos-client-append (:process op) (:value op) (count (:nodes test)))]
       (assoc op :type :ok, :value {:new-state new-state :appended-value (:value op)})))
   (teardown! [this test])
   (close! [_ test]))
