@@ -337,7 +337,6 @@ class Acceptor(Agent):
                          accept.ballot, self._ballot)
             return
 
-        assert accept.ballot >= self._ballot
         self._ballot = accept.ballot
         # TODO: right?
         accept_voted_set = {sv.slot: PValue(accept.ballot, sv.slot, sv.value)
