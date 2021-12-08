@@ -36,23 +36,23 @@ class E(Message):
 class MessageTest(unittest.TestCase):
     def test_from_dict(self):
         for jsn, obj in [
-            # ('{"a": {"value": 1}}',
-            #  B(A(1))),
-            # ('{"bs": [{"a": {"value": 1}}, {"a": {"value": 2}}]}',
-            #  C([B(A(1)), B(A(2))])),
-            ('{"ballot": {"inc": 2, "server_id": "foo"}, "from_uri": "host:1"}',
+            ('{"a": {"value": 1}}',
+             B(A(1))),
+            ('{"bs": [{"a": {"value": 1}}, {"a": {"value": 2}}]}',
+             C([B(A(1)), B(A(2))])),
+            ('{"ballot": {"ts": 2, "server_id": "foo"}, "from_uri": "host:1"}',
              Prepare("host:1", Ballot(2, "foo"))),
             ('''
              {
                "ballot": {
-                 "inc": 2,
+                 "ts": 2,
                  "server_id": "foo"
                },
                "from_uri": "host:1",
                "voted": {
                  "1": {
                    "ballot": {
-                     "inc": 1,
+                     "ts": 1,
                      "server_id": "foo"
                    },
                    "slot": 3,
@@ -100,15 +100,19 @@ class MaxSVTest(unittest.TestCase):
         self.assertEqual(
             {
                 # (slot, value).
-                SlotValue(1, 3),
-                SlotValue(2, 5),
+                SlotValue(1, Value(1, 2, 3)),
+                SlotValue(2, Value(1, 2, 5)),
             },
             max_sv([{
                 # slot: (ballot, slot, value).
-                1: PValue(1, 1, 2),  # Will be preempted by ballot 2 below.
-                2: PValue(4, 2, 5),  # The chosen value for slot 2.
+                # Will be preempted by ballot 2 below.
+                1: PValue(Ballot(1, ""), 1, Value(1, 2, 2)),
+                # The chosen value for slot 2.
+                2: PValue(Ballot(4, ""), 2, Value(1, 2, 5)),
             }, {
-                1: PValue(2, 1, 3),  # The chosen value for slot 1.
+                # The chosen value for slot 1.
+                1: PValue(Ballot(2, ""), 1, Value(1, 2, 3)),
             }, {
-                2: PValue(3, 2, 11)  # Preempted by ballot 4  above.
+                # Preempted by ballot 4  above.
+                2: PValue(Ballot(3, ""), 2, Value(1, 2, 11))
             }]))

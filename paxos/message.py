@@ -86,18 +86,20 @@ class Value(JSONish):
 @functools.total_ordering
 @dataclass(unsafe_hash=True)
 class Ballot(JSONish):
-    inc: int
+    ts: float
+    """Timestamp."""
     server_id: str
+    """Server id for uniqueness."""
 
     @classmethod
     def min(cls):
-        return cls(-1, "")
+        return cls(-1.0, "")
 
     def __lt__(self, other):
         if not isinstance(other, Ballot):
             return NotImplemented
 
-        return (self.inc, self.server_id) < (other.inc, other.server_id)
+        return (self.ts, self.server_id) < (other.ts, other.server_id)
 
 
 @dataclass(unsafe_hash=True)
@@ -131,7 +133,8 @@ class Message(JSONish):
 @dataclass(unsafe_hash=True)
 class ClientRequest(Message, Value):
     def get_value(self) -> Value:
-        # In case a client request ever has more than a value.
+        # Right now ClientRequest and Value are the same, this method is in
+        # case they're ever different.
         return Value(**dataclasses.asdict(self))
 
 

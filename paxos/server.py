@@ -96,7 +96,7 @@ if __name__ == "__main__":
     # Uses stdout/stderr if log_file is None.
     logging.basicConfig(
         filename=args.log_file,
-        format="[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
+        format=f"[%(asctime)s] p{args.port} %(levelname)s %(message)s",
         level=logging.INFO)
     logger = logging.getLogger("server")
 
