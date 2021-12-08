@@ -104,12 +104,21 @@
   Model
   (step [model op]
     (assert (= (:f op) :append))
-    (let [appended-value    (:appended-value (:value op))
-          actual-post-value (:new-state (:value op))]
-      (if (= actual-post-value (conj state appended-value))
-        (AppendableList. actual-post-value)
-        (knossos.model/inconsistent
-         (str "model value: " state ", op: " (:value op)))))))
+    (if (nil? (:new-state op))
+      ; op failed.
+      model
+      ; op succeeded. E.g., if state is [1 2] and we append 3, and the reply is [1 2 3 4] because
+      ; another process appended 4, then op is {:value {:appended-value 3, :new-state [1 2 3 4]}}.
+      ; Linearizability demands that [1 2] is a prefix of new-state and 3 is in the postfix.
+      (let [appended-value (:appended-value (:value op))
+            new-state      (:new-state (:value op))
+            actual-prefix  (subvec new-state 0 (count state))
+            actual-suffix  (subvec new-state (count state) (count new-state))]
+        (if (and (= state actual-prefix)
+                 (some #(= appended-value %) actual-suffix))
+          (AppendableList. new-state)
+          (knossos.model/inconsistent
+           (str "model value: " state ", op: " (:value op))))))))
 
 (defn appendable-list
   "Make an empty AppendableList."
@@ -127,17 +136,16 @@
           :os              debian/os
           :db              (db)
           :client          (Client. nil)
-          ; TODO: concurrent generator like https://github.com/jepsen-io/jepsen/issues/197 ?
           :generator       (->> append-op
-                                (gen/stagger 1)
+                                (gen/stagger 0.5)
                                 (gen/nemesis nil)
-                                (gen/time-limit 5))
+                                (gen/time-limit 60))
           ; Use Knossos checker because it's in the tutorial. TODO: try Elle.
           :checker         (checker/compose
-                             {:linear   (checker/linearizable
-                                         {:model     (appendable-list)
-                                          :algorithm :linear})
-                              :timeline (timeline/html)})
+                            {:linear   (checker/linearizable
+                                        {:model     (appendable-list)
+                                         :algorithm :linear})
+                             :timeline (timeline/html)})
           :pure-generators true}))
 
 (defn -main
