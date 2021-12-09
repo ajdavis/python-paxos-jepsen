@@ -9,6 +9,7 @@
              [control :as c]
              [db :as db]
              [generator :as gen]
+             [nemesis :as nemesis]
              [tests :as tests]]
             [jepsen.checker.timeline :as timeline]
             [jepsen.control.util :as cu]
@@ -119,18 +120,16 @@
             new-state      (:new-state (:value op))
             actual-prefix  (vec-slice new-state 0 (count state))
             actual-suffix  (vec-slice new-state (count state) (count new-state))]
-        (info
-          (str "state: " state "appended-value: " appended-value ", new-state: " new-state ", actual-prefix: " actual-prefix ", actual-suffix: " actual-suffix ", " (some #(= appended-value %) actual-suffix)))
         (cond
           (< (count new-state) (count state))
           (knossos.model/inconsistent
-            (str "new state: " new-state " shorter than state: " state))
+           (str "new state: " new-state " shorter than state: " state))
           (not= state actual-prefix)
           (knossos.model/inconsistent
-            (str "state: " state "not a prefix of new state: " new-state))
+           (str "state: " state "not a prefix of new state: " new-state))
           (not (some #(= appended-value %) actual-suffix))
           (knossos.model/inconsistent
-            (str "appended value: " appended-value " not in new values: " actual-suffix))
+           (str "appended value: " appended-value " not in new values: " actual-suffix))
           :else
           (AppendableList. (conj state appended-value)))))))
 
@@ -150,11 +149,16 @@
           :os              debian/os
           :db              (db)
           :client          (Client. nil)
-          ; TODO: try nemesis.
+          :nemesis         (nemesis/partition-random-halves)
           :generator       (->> append-op
                                 (gen/stagger 1/20)
-                                (gen/nemesis nil)
-                                (gen/time-limit 3))
+                                (gen/nemesis
+                                  (cycle
+                                    [(gen/sleep 5)
+                                     {:type :info, :f :start}
+                                     (gen/sleep 5)
+                                     {:type :info, :f :stop}]))
+                                (gen/time-limit 30))
           ; Use Knossos checker because it's in the tutorial. TODO: try Elle.
           :checker         (checker/compose
                             {:linear   (checker/linearizable
