@@ -98,27 +98,41 @@
   ; TODO: unique values.
   {:type :invoke, :f :append, :value (rand-int 10000000)})
 
+(defn vec-slice
+  "Subvec with bounds clamping."
+  [vec start end]
+  (subvec vec (min start (count vec)) (min end (count vec))))
+
 ; A Knossos model, validates that the Paxos system's state (which is an appendable vector of ints)
 ; behaves as it ought.
 (defrecord AppendableList [state]
   Model
   (step [model op]
     (assert (= (:f op) :append))
-    (if (nil? (:new-state op))
+    (if (nil? (:new-state (:value op)))
       ; op failed.
-      model
+      (do (info "failed" op) model)
       ; op succeeded. E.g., if state is [1 2] and we append 3, and the reply is [1 2 3 4] because
       ; another process appended 4, then op is {:value {:appended-value 3, :new-state [1 2 3 4]}}.
-      ; Linearizability demands that [1 2] is a prefix of new-state and 3 is in the postfix.
+      ; Linearizability demands that [1 2] is a prefix of new-state and 3 is in the suffix.
       (let [appended-value (:appended-value (:value op))
             new-state      (:new-state (:value op))
-            actual-prefix  (subvec new-state 0 (count state))
-            actual-suffix  (subvec new-state (count state) (count new-state))]
-        (if (and (= state actual-prefix)
-                 (some #(= appended-value %) actual-suffix))
-          (AppendableList. new-state)
+            actual-prefix  (vec-slice new-state 0 (count state))
+            actual-suffix  (vec-slice new-state (count state) (count new-state))]
+        (info
+          (str "state: " state "appended-value: " appended-value ", new-state: " new-state ", actual-prefix: " actual-prefix ", actual-suffix: " actual-suffix ", " (some #(= appended-value %) actual-suffix)))
+        (cond
+          (< (count new-state) (count state))
           (knossos.model/inconsistent
-           (str "model value: " state ", op: " (:value op))))))))
+            (str "new state: " new-state " shorter than state: " state))
+          (not= state actual-prefix)
+          (knossos.model/inconsistent
+            (str "state: " state "not a prefix of new state: " new-state))
+          (not (some #(= appended-value %) actual-suffix))
+          (knossos.model/inconsistent
+            (str "appended value: " appended-value " not in new values: " actual-suffix))
+          :else
+          (AppendableList. new-state))))))
 
 (defn appendable-list
   "Make an empty AppendableList."
@@ -136,10 +150,11 @@
           :os              debian/os
           :db              (db)
           :client          (Client. nil)
+          ; TODO: try nemesis.
           :generator       (->> append-op
-                                (gen/stagger 0.5)
+                                (gen/stagger 1/20)
                                 (gen/nemesis nil)
-                                (gen/time-limit 60))
+                                (gen/time-limit 3))
           ; Use Knossos checker because it's in the tutorial. TODO: try Elle.
           :checker         (checker/compose
                             {:linear   (checker/linearizable
