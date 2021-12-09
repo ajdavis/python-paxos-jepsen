@@ -132,7 +132,7 @@
           (knossos.model/inconsistent
             (str "appended value: " appended-value " not in new values: " actual-suffix))
           :else
-          (AppendableList. new-state))))))
+          (AppendableList. (conj state appended-value)))))))
 
 (defn appendable-list
   "Make an empty AppendableList."
