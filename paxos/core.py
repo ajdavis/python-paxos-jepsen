@@ -322,7 +322,7 @@ class Acceptor(Agent):
     def _handle_prepare(self, prepare: Prepare) -> None:
         # Phase 1b, Fig. 3 in Chand.
         if prepare.ballot <= self._ballot:
-            _logger.info("Ignore Phase 1b Prepare with stale %s, mine is %s",
+            _logger.info("Ignore Phase 1a Prepare with stale %s, mine is %s",
                          prepare.ballot, self._ballot)
             return
 
@@ -333,7 +333,7 @@ class Acceptor(Agent):
     def _handle_accept(self, accept: Accept) -> None:
         # Phase 2b, Fig. 5 in Chand. Note < for accept and <= for prepare.
         if accept.ballot < self._ballot:
-            _logger.info("Ignore Phase 2b Accept with stale %s, mine is %s",
+            _logger.info("Ignore Phase 2a Accept with stale %s, mine is %s",
                          accept.ballot, self._ballot)
             return
 
