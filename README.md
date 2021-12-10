@@ -1,6 +1,7 @@
 # Python Multi-Paxos and Jepsen
 
 I want to implement Multi-Paxos and test it with Jepsen, as an exercise to understand both.
+[Read more on my blog](https://emptysqua.re/blog/python-paxos-jepsen/).
 
 ## Paxos
 
